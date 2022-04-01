@@ -155,11 +155,14 @@
     <ClCompile Include="..\imgui-master\imgui_draw.cpp" />
     <ClCompile Include="..\imgui-master\imgui_tables.cpp" />
     <ClCompile Include="..\imgui-master\imgui_widgets.cpp" />
+    <ClCompile Include="AABB.cpp" />
+    <ClCompile Include="BVH.cpp" />
     <ClCompile Include="DebugCallback.cpp" />
     <ClCompile Include="InitShader.cpp" />
     <ClCompile Include="LoadMesh.cpp" />
     <ClCompile Include="LoadTexture.cpp" />
     <ClCompile Include="Main.cpp" />
+    <ClCompile Include="SceneObject.cpp" />
     <ClCompile Include="VideoMux.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -171,11 +174,14 @@
     <ClInclude Include="..\imgui-master\imstb_rectpack.h" />
     <ClInclude Include="..\imgui-master\imstb_textedit.h" />
     <ClInclude Include="..\imgui-master\imstb_truetype.h" />
+    <ClInclude Include="AABB.h" />
+    <ClInclude Include="BVH.h" />
     <ClInclude Include="Constants.hpp" />
     <ClInclude Include="DebugCallback.h" />
     <ClInclude Include="InitShader.h" />
     <ClInclude Include="LoadMesh.h" />
     <ClInclude Include="LoadTexture.h" />
+    <ClInclude Include="SceneObject.h" />
     <ClInclude Include="VideoMux.h" />
   </ItemGroup>
   <ItemGroup>

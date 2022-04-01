@@ -12,6 +12,7 @@
 #include <glm/gtx/transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
+#include <random>
 
 #include "InitShader.h"    //Functions for loading shaders from text files
 #include "LoadMesh.h"      //Functions for creating OpenGL buffers from mesh files
@@ -19,6 +20,8 @@
 #include "VideoMux.h"      //Functions for saving videos
 #include "DebugCallback.h"
 #include "Constants.hpp"
+#include "BVH.h"
+#include "SceneObject.h"
 
 int window_width = 1024;
 int window_height = 1024;
@@ -40,15 +43,16 @@ GLuint texture_id = -1;
 
 // Mesh data
 MeshData mesh_data;
-glm::vec3 object_1_pos;
-glm::vec3 object_2_pos;
-glm::vec3 object_3_pos;
-glm::vec3 object_1_velocity;
-glm::vec3 object_2_velocity;
-glm::vec3 object_3_velocity;
+//glm::vec3 object_1_pos;
+//glm::vec3 object_2_pos;
+//glm::vec3 object_3_pos;
+//glm::vec3 object_1_velocity;
+//glm::vec3 object_2_velocity;
+//glm::vec3 object_3_velocity;
+vector<SceneObject> objects;  // aabb, position, velocity
 
-float angle = 0.0f;
-float scale = 1.0f;
+float rotAngle = 0.0f;
+float mScale = 1.0f;
 float aspect = 1.0f;
 bool recording = false;
 
@@ -106,27 +110,12 @@ namespace AttribLocs
 
 float random(float min, float max)
 {
-    float randNum = (float)(rand() / (float)(RAND_MAX / abs(max - min)));
-    return min + randNum;
+    //float randNum = (float)(rand() / (float)(RAND_MAX / abs(max - min)));
+    std::random_device device;
+    std::mt19937 generator(device());
+    std::uniform_real_distribution<float> distribution(min, max);
+    return min + distribution(generator);
 }
-
-//void updatePosition(float& curPos, float min, float max, float& velocity)
-//{
-//    if (curPos < min || curPos > max)
-//    {
-//        if (curPos < min)
-//            curPos = min;
-//        else
-//            curPos = max;
-//
-//        velocity = -velocity;
-//        curPos += velocity;
-//    }
-//    else 
-//    {
-//        curPos += velocity;
-//    }
-//}
 
 void updatePosition(glm::vec3& curr_pos, glm::vec3& curr_velocity)
 {
@@ -164,6 +153,28 @@ void updatePosition(glm::vec3& curr_pos, glm::vec3& curr_velocity)
     curr_pos += curr_velocity * delta_time;
 
     //std::cout << "curr pos: " << curr_pos.x << ", " << curr_pos.y << ", " << curr_pos.z << std::endl;
+}
+
+
+void processSceneData()
+{
+    aiVector3D mBbMin = mesh_data.mBbMin;
+    aiVector3D mBbMax = mesh_data.mBbMax;
+    AABB aabb(mBbMin.x, mBbMin.y, mBbMin.z, mBbMax.x, mBbMax.y, mBbMax.z);
+
+
+    for (unsigned int i = 0; i < INSTANCE_NUM; i++)
+    {
+        // here i euqals to instance id
+        glm::vec3 _position = glm::vec3(random(-0.5, 0.5), random(-0.5, 0.5), random(-2.0, -1.0));
+        glm::vec3 _velocity = glm::vec3(random(-0.5, 0.2), random(-0.5, 0.4), random(-0.5, -0.4));
+
+        SceneObject sceneObject(i, _position, _velocity, aabb);
+        std::cout << sceneObject.pos.x << ", " << sceneObject.pos.y << std::endl;
+        std::cout << sceneObject.aabb.maxX << ", " << sceneObject.aabb.minX << std::endl;
+
+        objects.push_back(sceneObject);
+    }
 }
 
 void draw_gui(GLFWwindow* window)
@@ -205,8 +216,8 @@ void draw_gui(GLFWwindow* window)
         }
     }
 
-    ImGui::SliderFloat("View angle", &angle, -glm::pi<float>(), +glm::pi<float>());
-    ImGui::SliderFloat("Scale", &scale, -10.0f, +10.0f);
+    ImGui::SliderFloat("View angle", &rotAngle, -glm::pi<float>(), +glm::pi<float>());
+    ImGui::SliderFloat("Scale", &mScale, -10.0f, +10.0f);
 
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
@@ -226,7 +237,7 @@ void display(GLFWwindow* window)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     SceneData.eye_w = glm::vec4(0.0f, 0.0f, 3.0f, 1.0f);
-    glm::mat4 M = glm::rotate(angle, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::vec3(scale * mesh_data.mScaleFactor));
+    glm::mat4 M = glm::rotate(rotAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::vec3(mScale * mesh_data.mScaleFactor));
     //M = glm::translate(M, glm::vec3(object_1_pos));
     glm::mat4 V = glm::lookAt(glm::vec3(SceneData.eye_w), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 P = glm::perspective(glm::pi<float>() / 4.0f, aspect, 0.1f, 100.0f);
@@ -244,17 +255,18 @@ void display(GLFWwindow* window)
     glBindBuffer(GL_UNIFORM_BUFFER, 0); //unbind the ubo
 
      // Update model matrix instance attribute
-    glm::mat4 model_matrix_data[INSTANCE_NUM] = {
-        glm::translate(glm::mat4(1.f), object_1_pos),
-        glm::translate(glm::mat4(1.f), object_2_pos),
-        glm::translate(glm::mat4(1.f), object_3_pos)
-    };
+    vector<glm::mat4> model_matrix_data;
+    for (int i = 0; i < INSTANCE_NUM; i++)
+    {
+        glm::mat4 trans = glm::translate(glm::mat4(1.f), objects[i].pos);
+        model_matrix_data.push_back(trans);
+    }
     /*std::cout << "curr pos: " << object_1_pos.x << ", " << object_1_pos.y << ", " << object_1_pos.z << std::endl;
     std::cout << "-----" << std::endl;*/
 
     glBindBuffer(GL_ARRAY_BUFFER, model_matrix_buffer);
     //glBufferData(GL_ARRAY_BUFFER, INSTANCE_NUM * sizeof(glm::mat4), model_matrix_data, GL_STATIC_DRAW);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, INSTANCE_NUM * sizeof(glm::mat4), model_matrix_data);
+    glBufferSubData(GL_ARRAY_BUFFER, 0, INSTANCE_NUM * sizeof(glm::mat4), model_matrix_data.data());
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     glBindVertexArray(mesh_data.mVao);
@@ -289,23 +301,30 @@ void idle()
     glUniform1f(UniformLocs::delta_time, delta_time);
 
     // update position;
-    updatePosition(object_1_pos, object_1_velocity);
-    updatePosition(object_2_pos, object_2_velocity);
-    updatePosition(object_3_pos, object_3_velocity);
+    updatePosition(objects[0].pos, objects[0].velocity);
+    updatePosition(objects[1].pos, objects[1].velocity);
+    updatePosition(objects[2].pos, objects[2].velocity);
 }
 
 GLuint create_model_matrix_buffer()
 {
-    glm::mat4 model_matrix_data[INSTANCE_NUM] = {
-        glm::translate(glm::mat4(1.f), object_1_pos),
-        glm::translate(glm::mat4(1.f), object_2_pos),
-        glm::translate(glm::mat4(1.f), object_3_pos)
-    };
+    vector<glm::mat4> model_matrix_data;
+    /*glm::mat4 model_matrix_data[INSTANCE_NUM] = {
+        glm::translate(glm::mat4(1.f), objects[0].pos),
+        glm::translate(glm::mat4(1.f), objects[1].pos),
+        glm::translate(glm::mat4(1.f), objects[2].pos)
+    };*/
+
+    for (int i = 0; i < INSTANCE_NUM; i++)
+    {
+        glm::mat4 trans = glm::translate(glm::mat4(1.f), objects[i].pos);
+        model_matrix_data.push_back(trans);
+    }
 
     GLuint model_matrix_buffer;
     glGenBuffers(1, &model_matrix_buffer);
     glBindBuffer(GL_ARRAY_BUFFER, model_matrix_buffer);
-    glBufferData(GL_ARRAY_BUFFER, INSTANCE_NUM * sizeof(glm::mat4), model_matrix_data, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, INSTANCE_NUM * sizeof(glm::mat4), model_matrix_data.data(), GL_DYNAMIC_DRAW);
 
     return model_matrix_buffer;
 }
@@ -389,19 +408,21 @@ void initOpenGL()
 
     reload_shader();
     mesh_data = LoadMesh(mesh_name);
+    processSceneData();
+
     texture_id = LoadTexture(texture_name);
 
     // Create instanced vertex attributes
     glBindVertexArray(mesh_data.mVao);
 
     // randomize the position and velocity data
-    object_1_pos = glm::vec3(random(-0.5, 0.5), random(-0.5, 0.5), random(-2.0, -1.0));
+    /*object_1_pos = glm::vec3(random(-0.5, 0.5), random(-0.5, 0.5), random(-2.0, -1.0));
     object_2_pos = glm::vec3(random(-0.4, 0.5), random(-0.5, 0.5), random(-2.0, -1.0));
     object_3_pos = glm::vec3(random(-0.1, 0.5), random(-0.5, 0.5), random(-2.0, -1.0));
 
     object_1_velocity = glm::vec3(random(-0.5, 0.2), random(-0.5, 0.4), random(-0.5, -0.4));
     object_2_velocity = glm::vec3(random(-0.4, 0.5), random(-0.5, -0.3), random(0.4, 0.7));
-    object_3_velocity = glm::vec3(random(-0.4, 0.3), random(0.7, 0.3), random(-0.5, 0.1));
+    object_3_velocity = glm::vec3(random(-0.4, 0.3), random(0.3, 0.7), random(-0.5, 0.1));*/
 
     // create model matrix attribute
     model_matrix_buffer = create_model_matrix_buffer();
@@ -467,8 +488,6 @@ int main(int argc, char **argv)
    /* Make the window's context current */
    glfwMakeContextCurrent(window);
 
-   //setRandomState();
-   
    initOpenGL();
    
    //Init ImGui
