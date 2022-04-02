@@ -13,6 +13,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <random>
+#include <math.h>
 
 #include "InitShader.h"    //Functions for loading shaders from text files
 #include "LoadMesh.h"      //Functions for creating OpenGL buffers from mesh files
@@ -45,6 +46,7 @@ GLuint texture_id = -1;
 MeshData mesh_data;
 vector<SceneObject> objects;  // aabb, position, velocity
 BVH bvh;
+glm::mat4 M = mat4(1.f);
 
 float yAngle = 0.0f;
 float xAngle = 0.0f;
@@ -116,6 +118,32 @@ float random(float min, float max)
     return min + distribution(generator);
 }
 
+void collisionDetection()
+{
+    AABB aabb_0 = objects[0].aabb; 
+
+    for (int i = 0; i < INSTANCE_NUM; i++)
+    {
+        for (int j = i + 1; j < INSTANCE_NUM; j++) 
+        {
+            glm::vec3 pos_1 = objects[i].pos;
+            glm::vec3 pos_2 = objects[j].pos;
+
+            AABB aabb_1 = objects[i].aabb.update(pos_1);
+            AABB aabb_2 = objects[i].aabb.update(pos_2);
+
+            if (aabb_1.intersect(aabb_2))
+            {
+                // collided
+                objects[i].velocity = -objects[i].velocity;
+                objects[j].velocity = -objects[j].velocity;
+                //std::cout << "collision!" << std::endl;
+            }
+        }
+    }
+
+}
+
 void updatePosition(glm::vec3& curr_pos, glm::vec3& curr_velocity)
 {
     // bounding detection
@@ -153,6 +181,13 @@ void updatePosition(glm::vec3& curr_pos, glm::vec3& curr_velocity)
 
     //std::cout << "curr pos: " << curr_pos.x << ", " << curr_pos.y << ", " << curr_pos.z << std::endl;
 }
+void updatePositions()
+{
+    for (int i = 0; i < INSTANCE_NUM; i++)
+    {
+        updatePosition(objects[i].pos, objects[i].velocity);
+    }
+}
 
 
 void processSceneData()
@@ -161,12 +196,27 @@ void processSceneData()
     aiVector3D mBbMax = mesh_data.mBbMax;
     AABB aabb(mBbMin.x, mBbMin.y, mBbMin.z, mBbMax.x, mBbMax.y, mBbMax.z);
 
-
+    int col = ceil(sqrt(INSTANCE_NUM));
+    int row = col;
+    
     for (unsigned int i = 0; i < INSTANCE_NUM; i++)
     {
-        // here i euqals to instance id
-        glm::vec3 _position = glm::vec3(random(-0.5, 0.5), random(-0.5, 0.5), random(-2.0, -1.0));
-        glm::vec3 _velocity = glm::vec3(random(-0.5, 0.2), random(-0.5, 0.4), random(-0.5, -0.4));
+        // -2 to 2 (x) and -4 to -1 (z) horizontal plane
+        /*int z = i / row;
+        int x = i % row;*/
+
+        /*float half_width = 0.5 * 4.0 / (float)row;
+        float x_min = -2.0 + 4.0 * ((float)x / (float)row) - half_width;
+        float x_max = x_min + half_width * 2.0;
+        float z_max = -1.0 - 4.0 * ((float)z / (float)row) + half_width;
+        float z_min = z_max - half_width * 2.0;*/
+
+        glm::vec3 _position = glm::vec3(
+            random(-2.0, 2.0),
+            random(-1.0, 4.0),
+            random(-5.0, -1.0)
+        );
+        glm::vec3 _velocity = glm::vec3(random(-0.5, 0.2), random(0.1, 0.5), random(-0.5, -0.4));
 
         SceneObject sceneObject(i, _position, _velocity, aabb);
         std::cout << sceneObject.pos.x << ", " << sceneObject.pos.y << std::endl;
@@ -348,7 +398,7 @@ void display(GLFWwindow* window)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     SceneData.eye_w = glm::vec4(0.0f, 0.0f, 3.0f, 1.0f);
-    glm::mat4 M = glm::rotate(yAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::vec3(mScale * mesh_data.mScaleFactor));
+    M = glm::rotate(yAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::vec3(mScale * mesh_data.mScaleFactor));
     M = glm::rotate(M, xAngle, glm::vec3(1.0f, 0.0f, 0.0f));
     glm::mat4 V = glm::lookAt(glm::vec3(SceneData.eye_w), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 P = glm::perspective(glm::pi<float>() / 4.0f, aspect, 0.1f, 100.0f);
@@ -383,7 +433,7 @@ void display(GLFWwindow* window)
     glBindVertexArray(mesh_data.mVao);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     //glDrawElements(GL_TRIANGLES, mesh_data.mSubmesh[0].mNumIndices, GL_UNSIGNED_INT, 0);
-    glDrawElementsInstanced(GL_TRIANGLES, mesh_data.mSubmesh[0].mNumIndices, GL_UNSIGNED_INT, (void*)0, 3);
+    glDrawElementsInstanced(GL_TRIANGLES, mesh_data.mSubmesh[0].mNumIndices, GL_UNSIGNED_INT, (void*)0, INSTANCE_NUM);
     glBindVertexArray(0);
 
     // draw bounding box
@@ -418,10 +468,11 @@ void idle()
     //Pass time_sec value to the shaders
     glUniform1f(UniformLocs::delta_time, delta_time);
 
+    // collision detection
+    collisionDetection();
+
     // update position;
-    updatePosition(objects[0].pos, objects[0].velocity);
-    updatePosition(objects[1].pos, objects[1].velocity);
-    updatePosition(objects[2].pos, objects[2].velocity);
+    updatePositions();
 }
 
 GLuint create_model_matrix_buffer()

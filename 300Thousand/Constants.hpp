@@ -1,4 +1,4 @@
 #pragma once
 
-const int INSTANCE_NUM = 3;
+const int INSTANCE_NUM = 5;
 
