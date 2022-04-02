@@ -2,6 +2,7 @@
 layout(binding = 0) uniform sampler2D diffuse_tex;
 
 layout(location = 1) uniform float delta_time;
+layout(location = 2) uniform int type;
 
 layout(std140, binding = 0) uniform SceneUniforms
 {
@@ -36,7 +37,15 @@ out vec4 fragcolor; //the output color for this fragment
 
 void main(void)
 {   
-	fragcolor = texture(diffuse_tex, inData.tex_coord);
+	if (type == 1)
+	{
+		fragcolor = texture(diffuse_tex, inData.tex_coord);
+	}
+
+	if (type == 2)
+	{
+		fragcolor = vec4(1, 0, 0, 1);
+	}
 }
 
 

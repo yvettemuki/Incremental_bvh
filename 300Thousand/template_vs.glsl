@@ -1,6 +1,7 @@
 #version 430
 layout(location = 0) uniform mat4 M;
 layout(location = 1) uniform float delta_time;
+layout(location = 2) uniform int type;
 
 layout(std140, binding = 0) uniform SceneUniforms
 {
@@ -8,9 +9,9 @@ layout(std140, binding = 0) uniform SceneUniforms
 	vec4 eye_w;
 };
 
-in vec3 pos_attrib; //this variable holds the position of mesh vertices
-in vec2 tex_coord_attrib;
-in vec3 normal_attrib;  
+layout(location = 0) in vec3 pos_attrib; //this variable holds the position of mesh vertices
+layout(location = 1) in vec2 tex_coord_attrib;
+layout(location = 2) in vec3 normal_attrib;  
 layout(location = 3) in mat4 model_matrix;  // 3 4 5 6
 
 out VertexData
@@ -22,10 +23,19 @@ out VertexData
 
 void main(void)
 {
-	gl_Position = PV * model_matrix * M * vec4(pos_attrib, 1.0); //transform vertices and send result into pipeline
+	if (type == 1)
+	{
+		gl_Position = PV * model_matrix * M * vec4(pos_attrib, 1.0); //transform vertices and send result into pipeline
 
-	outData.tex_coord = tex_coord_attrib; //send tex_coord to fragment shader
-	outData.pw = vec3(M * vec4(pos_attrib, 1.0));
-	outData.nw = vec3(M * vec4(normal_attrib, 0.0));
+		outData.tex_coord = tex_coord_attrib; //send tex_coord to fragment shader
+		outData.pw = vec3(M * vec4(pos_attrib, 1.0));
+		outData.nw = vec3(M * vec4(normal_attrib, 0.0));
+	}
+
+	if (type == 2)
+	{
+		gl_Position = PV * model_matrix * M * vec4(pos_attrib, 1.0);
+	}
+	
 }
 

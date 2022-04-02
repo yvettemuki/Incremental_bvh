@@ -43,15 +43,11 @@ GLuint texture_id = -1;
 
 // Mesh data
 MeshData mesh_data;
-//glm::vec3 object_1_pos;
-//glm::vec3 object_2_pos;
-//glm::vec3 object_3_pos;
-//glm::vec3 object_1_velocity;
-//glm::vec3 object_2_velocity;
-//glm::vec3 object_3_velocity;
 vector<SceneObject> objects;  // aabb, position, velocity
+BVH bvh;
 
-float rotAngle = 0.0f;
+float yAngle = 0.0f;
+float xAngle = 0.0f;
 float mScale = 1.0f;
 float aspect = 1.0f;
 bool recording = false;
@@ -86,6 +82,8 @@ GLuint scene_ubo = -1;
 GLuint light_ubo = -1;
 GLuint material_ubo = -1;
 GLuint model_matrix_buffer = -1;
+GLuint aabbVBO = -1;
+GLuint aabbVAO = -1;
 
 namespace UboBinding
 {
@@ -100,6 +98,7 @@ namespace UniformLocs
 {
     int M = 0; //model matrix
     int delta_time = 1;
+    int type = 2;
 }
 
 namespace AttribLocs
@@ -177,6 +176,117 @@ void processSceneData()
     }
 }
 
+void generateBVH()
+{
+    BVH bvh;
+
+    /*for (SceneObject obj : objects)
+    {
+        bvh.addNode(obj);
+    }*/
+
+    AABB sceneAABB = bvh.initBVH(objects);
+}
+
+GLuint createAABBVbo(AABB aabb)
+{
+    vector<glm::vec3> boundingBoxVerties;
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.maxZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.maxZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.minZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.minZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.minZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.maxZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.maxZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.maxZ));
+
+    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.maxZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.minZ));
+    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.maxZ));
+
+    //static const GLfloat g_vertex_buffer_data[] = {
+    //-1.0f,-1.0f,-1.0f, // triangle 1 : begin
+    //-1.0f,-1.0f, 1.0f,
+    //-1.0f, 1.0f, 1.0f, // triangle 1 : end
+    //1.0f, 1.0f,-1.0f, // triangle 2 : begin
+    //-1.0f,-1.0f,-1.0f,
+    //-1.0f, 1.0f,-1.0f, // triangle 2 : end
+    //1.0f,-1.0f, 1.0f,
+    //-1.0f,-1.0f,-1.0f,
+    //1.0f,-1.0f,-1.0f,
+    //1.0f, 1.0f,-1.0f,
+    //1.0f,-1.0f,-1.0f,
+    //-1.0f,-1.0f,-1.0f,
+    //-1.0f,-1.0f,-1.0f,
+    //-1.0f, 1.0f, 1.0f,
+    //-1.0f, 1.0f,-1.0f,
+    //1.0f,-1.0f, 1.0f,
+    //-1.0f,-1.0f, 1.0f,
+    //-1.0f,-1.0f,-1.0f,
+    //-1.0f, 1.0f, 1.0f,
+    //-1.0f,-1.0f, 1.0f,
+    //1.0f,-1.0f, 1.0f,
+    //1.0f, 1.0f, 1.0f,
+    //1.0f,-1.0f,-1.0f,
+    //1.0f, 1.0f,-1.0f,
+    //1.0f,-1.0f,-1.0f,
+    //1.0f, 1.0f, 1.0f,
+    //1.0f,-1.0f, 1.0f,
+    //1.0f, 1.0f, 1.0f,
+    //1.0f, 1.0f,-1.0f,
+    //-1.0f, 1.0f,-1.0f,
+    //1.0f, 1.0f, 1.0f,
+    //-1.0f, 1.0f,-1.0f,
+    //-1.0f, 1.0f, 1.0f,
+    //1.0f, 1.0f, 1.0f,
+    //-1.0f, 1.0f, 1.0f,
+    //1.0f,-1.0f, 1.0f
+    //};
+
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * 36, boundingBoxVerties.data(), GL_STATIC_DRAW);
+
+    return vbo;
+}
+
 void draw_gui(GLFWwindow* window)
 {
     //Begin ImGui Frame
@@ -216,7 +326,8 @@ void draw_gui(GLFWwindow* window)
         }
     }
 
-    ImGui::SliderFloat("View angle", &rotAngle, -glm::pi<float>(), +glm::pi<float>());
+    ImGui::SliderFloat("Y View angle", &yAngle, -glm::pi<float>(), +glm::pi<float>());
+    ImGui::SliderFloat("X View angle", &xAngle, -glm::pi<float>(), +glm::pi<float>());
     ImGui::SliderFloat("Scale", &mScale, -10.0f, +10.0f);
 
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
@@ -237,8 +348,8 @@ void display(GLFWwindow* window)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     SceneData.eye_w = glm::vec4(0.0f, 0.0f, 3.0f, 1.0f);
-    glm::mat4 M = glm::rotate(rotAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::vec3(mScale * mesh_data.mScaleFactor));
-    //M = glm::translate(M, glm::vec3(object_1_pos));
+    glm::mat4 M = glm::rotate(yAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::vec3(mScale * mesh_data.mScaleFactor));
+    M = glm::rotate(M, xAngle, glm::vec3(1.0f, 0.0f, 0.0f));
     glm::mat4 V = glm::lookAt(glm::vec3(SceneData.eye_w), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     glm::mat4 P = glm::perspective(glm::pi<float>() / 4.0f, aspect, 0.1f, 100.0f);
     SceneData.PV = P * V;
@@ -249,6 +360,7 @@ void display(GLFWwindow* window)
 
     // Set uniforms
     glUniformMatrix4fv(UniformLocs::M, 1, false, glm::value_ptr(M));
+    glUniform1i(UniformLocs::type, 1);
 
     glBindBuffer(GL_UNIFORM_BUFFER, scene_ubo); //Bind the OpenGL UBO before we update the data.
     glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(SceneData), &SceneData); //Upload the new uniform values.
@@ -263,16 +375,22 @@ void display(GLFWwindow* window)
     }
     /*std::cout << "curr pos: " << object_1_pos.x << ", " << object_1_pos.y << ", " << object_1_pos.z << std::endl;
     std::cout << "-----" << std::endl;*/
-
+    // update object positions
     glBindBuffer(GL_ARRAY_BUFFER, model_matrix_buffer);
-    //glBufferData(GL_ARRAY_BUFFER, INSTANCE_NUM * sizeof(glm::mat4), model_matrix_data, GL_STATIC_DRAW);
     glBufferSubData(GL_ARRAY_BUFFER, 0, INSTANCE_NUM * sizeof(glm::mat4), model_matrix_data.data());
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 
     glBindVertexArray(mesh_data.mVao);
-
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
     //glDrawElements(GL_TRIANGLES, mesh_data.mSubmesh[0].mNumIndices, GL_UNSIGNED_INT, 0);
     glDrawElementsInstanced(GL_TRIANGLES, mesh_data.mSubmesh[0].mNumIndices, GL_UNSIGNED_INT, (void*)0, 3);
+    glBindVertexArray(0);
+
+    // draw bounding box
+    glBindVertexArray(aabbVAO);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+    glUniform1i(UniformLocs::type, 2);
+    glDrawArraysInstanced(GL_TRIANGLES, 0, 36, INSTANCE_NUM);
     glBindVertexArray(0);
 
     draw_gui(window);
@@ -409,23 +527,41 @@ void initOpenGL()
     reload_shader();
     mesh_data = LoadMesh(mesh_name);
     processSceneData();
+    generateBVH();
 
+    // load texture
     texture_id = LoadTexture(texture_name);
+
+    // create model matrix attribute
+    model_matrix_buffer = create_model_matrix_buffer();
+
+    // init aabb box
+    glGenVertexArrays(1, &aabbVAO);
+    glBindVertexArray(aabbVAO);
+
+    // bind vertex attribute
+    AABB aabb = objects[0].aabb;
+    aabbVBO = createAABBVbo(aabb);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, model_matrix_buffer);
+    // bounding model matrix to shader
+    for (int i = 0; i < 4; i++)
+    {
+        glVertexAttribPointer(AttribLocs::model_matrix + i,
+            4, GL_FLOAT, GL_FALSE,
+            sizeof(glm::mat4),
+            (void*)(sizeof(glm::vec4) * i));
+        glEnableVertexAttribArray(AttribLocs::model_matrix + i);
+        glVertexAttribDivisor(AttribLocs::model_matrix + i, 1);
+    }
+    glBindVertexArray(0);
 
     // Create instanced vertex attributes
     glBindVertexArray(mesh_data.mVao);
 
-    // randomize the position and velocity data
-    /*object_1_pos = glm::vec3(random(-0.5, 0.5), random(-0.5, 0.5), random(-2.0, -1.0));
-    object_2_pos = glm::vec3(random(-0.4, 0.5), random(-0.5, 0.5), random(-2.0, -1.0));
-    object_3_pos = glm::vec3(random(-0.1, 0.5), random(-0.5, 0.5), random(-2.0, -1.0));
-
-    object_1_velocity = glm::vec3(random(-0.5, 0.2), random(-0.5, 0.4), random(-0.5, -0.4));
-    object_2_velocity = glm::vec3(random(-0.4, 0.5), random(-0.5, -0.3), random(0.4, 0.7));
-    object_3_velocity = glm::vec3(random(-0.4, 0.3), random(0.3, 0.7), random(-0.5, 0.1));*/
-
-    // create model matrix attribute
-    model_matrix_buffer = create_model_matrix_buffer();
+    glBindBuffer(GL_ARRAY_BUFFER, model_matrix_buffer);
     // bounding model matrix to shader
     for (int i = 0; i < 4; i++)
     {
@@ -438,6 +574,8 @@ void initOpenGL()
     }
 
     glBindVertexArray(0);
+
+    // bind aabbvbo to shader;
 
     //Create and initialize uniform buffers
     glGenBuffers(1, &scene_ubo);
