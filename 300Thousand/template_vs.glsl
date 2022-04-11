@@ -34,7 +34,7 @@ void main(void)
 	if (type == 1)
 	{
 		// objects 
-		gl_Position = PV * model_matrix * M * vec4(pos_attrib, 1.0); //transform vertices and send result into pipeline
+		gl_Position = PV * M * model_matrix * vec4(pos_attrib, 1.0); //transform vertices and send result into pipeline
 
 		outData.tex_coord = tex_coord_attrib; //send tex_coord to fragment shader
 		outData.pw = vec3(M * vec4(pos_attrib, 1.0));
@@ -44,7 +44,7 @@ void main(void)
 	if (type == 2)
 	{
 		// bounding box
-		gl_Position = PV * model_matrix * M * vec4(pos_attrib, 1.0);
+		gl_Position = PV * M * vec4(pos_attrib, 1.0);
 	}
 
 	if (type == 3)

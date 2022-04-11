@@ -95,8 +95,7 @@ struct MaterialUniforms
 GLuint light_ubo = -1;
 GLuint material_ubo = -1;
 GLuint model_matrix_buffer = -1;
-GLuint aabbVBO = -1;
-GLuint aabbVAO = -1;
+GLuint aabbVAO[INSTANCE_NUM] = {-1};
 
 namespace UboBinding
 {
@@ -340,7 +339,7 @@ void display(GLFWwindow* window)
     glUniformMatrix4fv(UniformLocs::M, 1, false, glm::value_ptr(M));
     glUniform1i(UniformLocs::type, 1);
 
-     // Update model matrix instance attribute
+    // Update model matrix instance attribute
     vector<glm::mat4> model_matrix_data;
     for (int i = 0; i < INSTANCE_NUM; i++)
     {
@@ -361,11 +360,14 @@ void display(GLFWwindow* window)
     // draw bounding box
     if (enableAABB)
     {
-        glBindVertexArray(aabbVAO);
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        glUniform1i(UniformLocs::type, 2);
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 36, INSTANCE_NUM);
-        glBindVertexArray(0);
+        for (int i = 0; i < INSTANCE_NUM; i++)
+        {
+            glBindVertexArray(aabbVAO[i]);
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            glUniform1i(UniformLocs::type, 2);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+            glBindVertexArray(0);
+        }
     }
 
     // draw bvh
@@ -530,26 +532,27 @@ void initOpenGL()
     model_matrix_buffer = create_model_matrix_buffer();
 
     // init aabb box
-    glGenVertexArrays(1, &aabbVAO);
-    glBindVertexArray(aabbVAO);
-
-    // bind vertex attribute
-    AABB aabb = objects[0].aabb;
-    aabbVBO = BVH::createAABBVbo(aabb);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
-
-    glBindBuffer(GL_ARRAY_BUFFER, model_matrix_buffer);
-    // bounding model matrix to shader
-    for (int i = 0; i < 4; i++)
+    glGenVertexArrays(INSTANCE_NUM, aabbVAO);
+    for (int i = 0; i < INSTANCE_NUM; i++)
     {
-        glVertexAttribPointer(AttribLocs::model_matrix + i,
-            4, GL_FLOAT, GL_FALSE,
-            sizeof(glm::mat4),
-            (void*)(sizeof(glm::vec4) * i));
-        glEnableVertexAttribArray(AttribLocs::model_matrix + i);
-        glVertexAttribDivisor(AttribLocs::model_matrix + i, 1);
-    }
+        glBindVertexArray(aabbVAO[i]);
+        GLuint aabbVBO = BVH::createAABBVbo(objects[i].aabb);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+        glBindVertexArray(0);
+    }  
+
+    //glBindBuffer(GL_ARRAY_BUFFER, model_matrix_buffer);
+    //// bounding model matrix to shader
+    //for (int i = 0; i < 4; i++)
+    //{
+    //    glVertexAttribPointer(AttribLocs::model_matrix + i,
+    //        4, GL_FLOAT, GL_FALSE,
+    //        sizeof(glm::mat4),
+    //        (void*)(sizeof(glm::vec4) * i));
+    //    glEnableVertexAttribArray(AttribLocs::model_matrix + i);
+    //    glVertexAttribDivisor(AttribLocs::model_matrix + i, 1);
+    //}
     glBindVertexArray(0);
 
     // Create instanced vertex attributes
