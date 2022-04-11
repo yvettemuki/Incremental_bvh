@@ -39,12 +39,20 @@ void main(void)
 {   
 	if (type == 1)
 	{
+		// object
 		fragcolor = texture(diffuse_tex, inData.tex_coord);
 	}
 
 	if (type == 2)
 	{
+		// bounding box
 		fragcolor = vec4(1, 0, 0, 1);
+	}
+
+	if (type == 3)
+	{
+		// arena plane
+		fragcolor = vec4(0.325, 0.411, 0.462, 1.0);
 	}
 }
 

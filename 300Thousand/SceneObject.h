@@ -11,14 +11,15 @@ struct SceneObject
 {
 public:
 
-	SceneObject(unsigned int index, vec3 pos, vec3 velocity, AABB aabb) :
-		index(index), pos(pos), velocity(velocity), aabb(aabb) {};   // keep attection the assignment constuctor will execute automatically
+	SceneObject(unsigned int index, vec3 currPos, vec3 prevPos, vec3 velocity, AABB aabb) :
+		index(index), currPos(currPos), prevPos(prevPos), velocity(velocity), aabb(aabb) {};   // keep attection the assignment constuctor will execute automatically
 
 	vec3 getBbMin();
 	vec3 getBbMax();
 
 	unsigned int index;  // index map to the opengl input instance id
-	vec3 pos;
+	vec3 currPos;
+	vec3 prevPos;
 	vec3 velocity;
 	AABB aabb;
 

@@ -1,5 +1,7 @@
 #pragma once
 #include "AABB.h";
+#include <GL/glew.h>
+#include <GLFW/glfw3.h>
 #include <vector>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -10,34 +12,40 @@
 using namespace std;
 using namespace glm;
 
-struct AABBNode
+/*
+ when node is root, its parentNode = -1, when node is leave, its childnode = -1, -1 equals null
+*/
+
+struct BVHNode
 {
-	AABBNode(SceneObject object, AABB aabb, unsigned int parenetNode, unsigned int leftChilNode, unsigned int rightChildNode, unsigned int nextIndex)
-		: object(object), aabb(aabb), parentNode(parenetNode), leftChildNode(leftChildNode), rightChildNode(rightChildNode) {};
+	BVHNode(AABB aabb, int parenetNode, int leftChildNode, int rightChildNode, int index, int indexInMapToScene)
+		: aabb(aabb), parentNode(parenetNode), leftChildNode(leftChildNode), rightChildNode(rightChildNode), index(index), indexMapToScene(indexInMapToScene) {};
 
-	SceneObject object;
 	AABB aabb;
-	unsigned int parentNode;
-	unsigned int leftChildNode;
-	unsigned int rightChildNode;
-	unsigned int nextIndex;     // index map for matrix model data
-
+	int parentNode;
+	int leftChildNode;
+	int rightChildNode;
+	int index;
+	int indexMapToScene;
 };
 
 class BVH
 {
 public:
-	BVH() {};
-	AABB initBVH(vector<SceneObject> objects);
+	BVH(const vector<SceneObject>);
+	void initBVH();
 	void addNode(SceneObject object);
-	/*void updateBVH();
-	void searchBVH();
-	void deleteBVH();*/
-	unsigned int findNeighbour(const SceneObject object);
+	void updateBVH();
+	BVHNode traverseBVH();
+	void deleteBVH();
+	int findClosestNode(AABB aabb, int nodeIndex);
+	void updateAABBInBVH(int node_2_parent_index);
+	void drawBVH();
+	static GLuint createAABBVbo(AABB aabb);
 
 private:
-	vector<AABBNode> bvhNodes;
-	vector<SceneObject> objects;
-	unsigned int rootIndex;
+	vector<BVHNode> bvhNodes;
+	//vector<SceneObject> objects;
+	int rootIndex;
 };
 

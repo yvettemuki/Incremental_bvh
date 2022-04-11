@@ -23,6 +23,7 @@
 #include "Constants.hpp"
 #include "BVH.h"
 #include "SceneObject.h"
+#include "Camera.h"
 
 int window_width = 1024;
 int window_height = 1024;
@@ -45,22 +46,32 @@ GLuint texture_id = -1;
 // Mesh data
 MeshData mesh_data;
 vector<SceneObject> objects;  // aabb, position, velocity
-BVH bvh;
+BVH* bvh;
 glm::mat4 M = mat4(1.f);
+
+// Camera
+Camera* camera;
+
+// Attribute less
+GLuint attribless_arena_vao = -1;
 
 float yAngle = 0.0f;
 float xAngle = 0.0f;
 float mScale = 1.0f;
 float aspect = 1.0f;
+float fov = glm::pi<float>() / 4.0;
+float camPos[3] = { 0.0, 0.5, 3.0 };
 bool recording = false;
+bool enableAABB = false;
+bool enableDynamic = false;
 
 
 //This structure mirrors the uniform block declared in the shader
-struct SceneUniforms
-{
-    glm::mat4 PV;	//camera projection * view matrix
-    glm::vec4 eye_w;	//world-space eye position
-} SceneData;
+//struct SceneUniforms
+//{
+//    glm::mat4 PV;	//camera projection * view matrix
+//    glm::vec4 eye_w;	//world-space eye position
+//} SceneData;
 
 struct LightUniforms
 {
@@ -80,7 +91,7 @@ struct MaterialUniforms
 } MaterialData;
 
 //IDs for the buffer objects holding the uniform block data
-GLuint scene_ubo = -1;
+//GLuint scene_ubo = -1;
 GLuint light_ubo = -1;
 GLuint material_ubo = -1;
 GLuint model_matrix_buffer = -1;
@@ -90,7 +101,7 @@ GLuint aabbVAO = -1;
 namespace UboBinding
 {
     //These values come from the binding value specified in the shader block layout
-    int scene = 0;
+    //int scene = 0;
     int light = 1;
     int material = 2;
 }
@@ -120,49 +131,56 @@ float random(float min, float max)
 
 void collisionDetection()
 {
-    AABB aabb_0 = objects[0].aabb; 
-
     for (int i = 0; i < INSTANCE_NUM; i++)
     {
         for (int j = i + 1; j < INSTANCE_NUM; j++) 
         {
-            glm::vec3 pos_1 = objects[i].pos;
-            glm::vec3 pos_2 = objects[j].pos;
+            /*AABB aabb_1 = objects[i].aabb.update(objects[i].currPos);
+            AABB aabb_2 = objects[j].aabb.update(objects[j].currPos);*/
+            AABB aabb_1 = objects[i].aabb;
+            AABB aabb_2 = objects[j].aabb;
 
-            AABB aabb_1 = objects[i].aabb.update(pos_1);
-            AABB aabb_2 = objects[i].aabb.update(pos_2);
-
-            if (aabb_1.intersect(aabb_2))
+            if (aabb_1.overlap(aabb_2))
             {
                 // collided
+                glm::vec3 area = aabb_1.intersection(aabb_2);
+
                 objects[i].velocity = -objects[i].velocity;
                 objects[j].velocity = -objects[j].velocity;
-                //std::cout << "collision!" << std::endl;
+
+                // update position
+                objects[i].prevPos = glm::vec3(objects[i].currPos.x, objects[i].currPos.y, objects[i].currPos.z);
+                objects[i].currPos += objects[i].velocity * area;
+
+                // update bounding box
+                glm::vec3 deltaPos = objects[i].currPos - objects[i].prevPos;
+                objects[i].aabb.update(deltaPos);
+
             }
         }
     }
 
 }
 
-void updatePosition(glm::vec3& curr_pos, glm::vec3& curr_velocity)
+void updatePosition(glm::vec3& curr_pos, glm::vec3& prev_pos, glm::vec3& curr_velocity)
 {
     // bounding detection
-    if (curr_pos.x < -0.8 || curr_pos.x > 0.8)
+    if (curr_pos.x < -2.0 || curr_pos.x > 2.0)
     {
-        if (curr_pos.x < -0.8)
-            curr_pos.x = -0.8;
+        if (curr_pos.x < -2.0)
+            curr_pos.x = -2.0;
         else
-            curr_pos.x = 0.8;
+            curr_pos.x = 2.0;
 
         curr_velocity.x = -curr_velocity.x;
     }
 
-    if (curr_pos.y < -0.8 || curr_pos.y > 0.8)
+    if (curr_pos.y < -2.0 || curr_pos.y > 2.0)
     {
-        if (curr_pos.y < -0.8)
-            curr_pos.y = -0.8;
+        if (curr_pos.y < -2.0)
+            curr_pos.y = -2.0;
         else
-            curr_pos.y = 0.8;
+            curr_pos.y = 2.0;
 
         curr_velocity.y = -curr_velocity.y;
     }
@@ -177,164 +195,72 @@ void updatePosition(glm::vec3& curr_pos, glm::vec3& curr_velocity)
         curr_velocity.z = -curr_velocity.z;
     }
 
+    prev_pos = glm::vec3(curr_pos.x, curr_pos.y, curr_pos.z);
     curr_pos += curr_velocity * delta_time;
 
-    //std::cout << "curr pos: " << curr_pos.x << ", " << curr_pos.y << ", " << curr_pos.z << std::endl;
 }
 void updatePositions()
 {
     for (int i = 0; i < INSTANCE_NUM; i++)
     {
-        updatePosition(objects[i].pos, objects[i].velocity);
+        updatePosition(objects[i].currPos, objects[i].prevPos, objects[i].velocity);
+
+        // update bounding box
+        glm::vec3 deltaPos = objects[i].currPos - objects[i].prevPos;
+        objects[i].aabb.update(deltaPos);
     }
 }
-
 
 void processSceneData()
 {
     aiVector3D mBbMin = mesh_data.mBbMin;
     aiVector3D mBbMax = mesh_data.mBbMax;
-    AABB aabb(mBbMin.x, mBbMin.y, mBbMin.z, mBbMax.x, mBbMax.y, mBbMax.z);
 
-    int col = ceil(sqrt(INSTANCE_NUM));
-    int row = col;
+    int length = ceil(sqrt(INSTANCE_NUM));
+
+    float unit_area = (float)width_range / (float)length;  // x=y
+    std::cout << length << ", " << unit_area << std::endl;
+
     
     for (unsigned int i = 0; i < INSTANCE_NUM; i++)
     {
-        // -2 to 2 (x) and -4 to -1 (z) horizontal plane
-        /*int z = i / row;
-        int x = i % row;*/
-
-        /*float half_width = 0.5 * 4.0 / (float)row;
-        float x_min = -2.0 + 4.0 * ((float)x / (float)row) - half_width;
-        float x_max = x_min + half_width * 2.0;
-        float z_max = -1.0 - 4.0 * ((float)z / (float)row) + half_width;
-        float z_min = z_max - half_width * 2.0;*/
+        int z = i / length;
+        int x = i % length;
+        float x_0 = width_start_from + x * unit_area;
+        float z_0 = depth_start_from + z * unit_area;
 
         glm::vec3 _position = glm::vec3(
-            random(-2.0, 2.0),
-            random(-1.0, 4.0),
-            random(-5.0, -1.0)
+            /*random(-2.0, 2.0),
+            0.0,
+            random(-3.0, -1.0)*/
+            random(x_0, x_0 + unit_area),
+            0.0,
+            random(z_0, z_0 + unit_area)
         );
-        glm::vec3 _velocity = glm::vec3(random(-0.5, 0.2), random(0.1, 0.5), random(-0.5, -0.4));
+        glm::vec3 _velocity = glm::vec3(random(-0.5, 0.2), 0.0, random(-0.5, -0.4));
 
-        SceneObject sceneObject(i, _position, _velocity, aabb);
-        std::cout << sceneObject.pos.x << ", " << sceneObject.pos.y << std::endl;
-        std::cout << sceneObject.aabb.maxX << ", " << sceneObject.aabb.minX << std::endl;
+        // update aabb
+        AABB aabb(mBbMin.x, mBbMin.y, mBbMin.z, mBbMax.x, mBbMax.y, mBbMax.z);
+        aabb.update(_position);
+
+        SceneObject sceneObject(i, _position, glm::vec3(0, 0, 0), _velocity, aabb);
+        /*std::cout << sceneObject.pos.x << ", " << sceneObject.pos.y << std::endl;
+        std::cout << sceneObject.aabb.maxX << ", " << sceneObject.aabb.minX << std::endl;*/
 
         objects.push_back(sceneObject);
     }
 }
 
-void generateBVH()
+void initBVH()
 {
-    BVH bvh;
-
-    /*for (SceneObject obj : objects)
-    {
-        bvh.addNode(obj);
-    }*/
-
-    AABB sceneAABB = bvh.initBVH(objects);
+    bvh = new BVH(objects);
 }
 
-GLuint createAABBVbo(AABB aabb)
+void initCamera()
 {
-    vector<glm::vec3> boundingBoxVerties;
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.maxZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.maxZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.minZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.minZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.minZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.maxZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.maxY, aabb.maxZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.maxZ));
-
-    boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.minY, aabb.maxZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.minZ));
-    boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.maxZ));
-
-    //static const GLfloat g_vertex_buffer_data[] = {
-    //-1.0f,-1.0f,-1.0f, // triangle 1 : begin
-    //-1.0f,-1.0f, 1.0f,
-    //-1.0f, 1.0f, 1.0f, // triangle 1 : end
-    //1.0f, 1.0f,-1.0f, // triangle 2 : begin
-    //-1.0f,-1.0f,-1.0f,
-    //-1.0f, 1.0f,-1.0f, // triangle 2 : end
-    //1.0f,-1.0f, 1.0f,
-    //-1.0f,-1.0f,-1.0f,
-    //1.0f,-1.0f,-1.0f,
-    //1.0f, 1.0f,-1.0f,
-    //1.0f,-1.0f,-1.0f,
-    //-1.0f,-1.0f,-1.0f,
-    //-1.0f,-1.0f,-1.0f,
-    //-1.0f, 1.0f, 1.0f,
-    //-1.0f, 1.0f,-1.0f,
-    //1.0f,-1.0f, 1.0f,
-    //-1.0f,-1.0f, 1.0f,
-    //-1.0f,-1.0f,-1.0f,
-    //-1.0f, 1.0f, 1.0f,
-    //-1.0f,-1.0f, 1.0f,
-    //1.0f,-1.0f, 1.0f,
-    //1.0f, 1.0f, 1.0f,
-    //1.0f,-1.0f,-1.0f,
-    //1.0f, 1.0f,-1.0f,
-    //1.0f,-1.0f,-1.0f,
-    //1.0f, 1.0f, 1.0f,
-    //1.0f,-1.0f, 1.0f,
-    //1.0f, 1.0f, 1.0f,
-    //1.0f, 1.0f,-1.0f,
-    //-1.0f, 1.0f,-1.0f,
-    //1.0f, 1.0f, 1.0f,
-    //-1.0f, 1.0f,-1.0f,
-    //-1.0f, 1.0f, 1.0f,
-    //1.0f, 1.0f, 1.0f,
-    //-1.0f, 1.0f, 1.0f,
-    //1.0f,-1.0f, 1.0f
-    //};
-
-    GLuint vbo;
-    glGenBuffers(1, &vbo);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * 36, boundingBoxVerties.data(), GL_STATIC_DRAW);
-
-    return vbo;
+    camera = new Camera(fov, aspect);
+    camera->lookAt(glm::vec3(0.0, 0.0, 3.0), glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0));
+    camera->perspective(fov, aspect, 0.1f, 100.f);
 }
 
 void draw_gui(GLFWwindow* window)
@@ -376,9 +302,12 @@ void draw_gui(GLFWwindow* window)
         }
     }
 
-    ImGui::SliderFloat("Y View angle", &yAngle, -glm::pi<float>(), +glm::pi<float>());
-    ImGui::SliderFloat("X View angle", &xAngle, -glm::pi<float>(), +glm::pi<float>());
+   /* ImGui::SliderFloat("Y View angle", &yAngle, -glm::pi<float>(), +glm::pi<float>());
+    ImGui::SliderFloat("X View angle", &xAngle, -glm::pi<float>(), +glm::pi<float>());*/
+    ImGui::SliderFloat3("Cam Pos", camPos, -3.f, 3.f);
     ImGui::SliderFloat("Scale", &mScale, -10.0f, +10.0f);
+    ImGui::Checkbox("AABB", &enableAABB);
+    ImGui::Checkbox("Dynamic", &enableDynamic);
 
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
@@ -397,34 +326,28 @@ void display(GLFWwindow* window)
     //Clear the screen to the color previously specified in the glClearColor(...) call.
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    SceneData.eye_w = glm::vec4(0.0f, 0.0f, 3.0f, 1.0f);
-    M = glm::rotate(yAngle, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::scale(glm::vec3(mScale * mesh_data.mScaleFactor));
-    M = glm::rotate(M, xAngle, glm::vec3(1.0f, 0.0f, 0.0f));
-    glm::mat4 V = glm::lookAt(glm::vec3(SceneData.eye_w), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    glm::mat4 P = glm::perspective(glm::pi<float>() / 4.0f, aspect, 0.1f, 100.0f);
-    SceneData.PV = P * V;
+    M = glm::scale(glm::vec3(mScale * mesh_data.mScaleFactor));
 
     glUseProgram(shader_program);
 
     glBindTexture(0, texture_id);
 
+    // update camera
+    camera->lookAt(glm::vec3(camPos[0], camPos[1], camPos[2]), glm::vec3(0.0, 0.0, 0.0), glm::vec3(0.0, 1.0, 0.0));
+    camera->update();
+
     // Set uniforms
     glUniformMatrix4fv(UniformLocs::M, 1, false, glm::value_ptr(M));
     glUniform1i(UniformLocs::type, 1);
-
-    glBindBuffer(GL_UNIFORM_BUFFER, scene_ubo); //Bind the OpenGL UBO before we update the data.
-    glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(SceneData), &SceneData); //Upload the new uniform values.
-    glBindBuffer(GL_UNIFORM_BUFFER, 0); //unbind the ubo
 
      // Update model matrix instance attribute
     vector<glm::mat4> model_matrix_data;
     for (int i = 0; i < INSTANCE_NUM; i++)
     {
-        glm::mat4 trans = glm::translate(glm::mat4(1.f), objects[i].pos);
+        glm::mat4 trans = glm::translate(glm::mat4(1.f), objects[i].currPos);
         model_matrix_data.push_back(trans);
     }
-    /*std::cout << "curr pos: " << object_1_pos.x << ", " << object_1_pos.y << ", " << object_1_pos.z << std::endl;
-    std::cout << "-----" << std::endl;*/
+   
     // update object positions
     glBindBuffer(GL_ARRAY_BUFFER, model_matrix_buffer);
     glBufferSubData(GL_ARRAY_BUFFER, 0, INSTANCE_NUM * sizeof(glm::mat4), model_matrix_data.data());
@@ -432,15 +355,32 @@ void display(GLFWwindow* window)
 
     glBindVertexArray(mesh_data.mVao);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-    //glDrawElements(GL_TRIANGLES, mesh_data.mSubmesh[0].mNumIndices, GL_UNSIGNED_INT, 0);
     glDrawElementsInstanced(GL_TRIANGLES, mesh_data.mSubmesh[0].mNumIndices, GL_UNSIGNED_INT, (void*)0, INSTANCE_NUM);
     glBindVertexArray(0);
 
     // draw bounding box
-    glBindVertexArray(aabbVAO);
-    glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-    glUniform1i(UniformLocs::type, 2);
-    glDrawArraysInstanced(GL_TRIANGLES, 0, 36, INSTANCE_NUM);
+    if (enableAABB)
+    {
+        glBindVertexArray(aabbVAO);
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glUniform1i(UniformLocs::type, 2);
+        glDrawArraysInstanced(GL_TRIANGLES, 0, 36, INSTANCE_NUM);
+        glBindVertexArray(0);
+    }
+
+    // draw bvh
+    /*if (enableBVH)
+    {
+        
+    }*/
+
+    // draw arena plane
+    M = glm::translate(glm::mat4(1.0), glm::vec3(0.0, -0.15, 0.0)) * glm::scale(mat4(1.0), glm::vec3(5.0));
+    glUniformMatrix4fv(UniformLocs::M, 1, false, glm::value_ptr(M));
+    glBindVertexArray(attribless_arena_vao);
+    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+    glUniform1i(UniformLocs::type, 3);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
 
     draw_gui(window);
@@ -468,25 +408,24 @@ void idle()
     //Pass time_sec value to the shaders
     glUniform1f(UniformLocs::delta_time, delta_time);
 
-    // collision detection
-    collisionDetection();
+    if (enableDynamic)
+    {
+        // update position;
+        updatePositions();
 
-    // update position;
-    updatePositions();
+        // collision detection
+        collisionDetection();
+    }
+    
 }
 
 GLuint create_model_matrix_buffer()
 {
     vector<glm::mat4> model_matrix_data;
-    /*glm::mat4 model_matrix_data[INSTANCE_NUM] = {
-        glm::translate(glm::mat4(1.f), objects[0].pos),
-        glm::translate(glm::mat4(1.f), objects[1].pos),
-        glm::translate(glm::mat4(1.f), objects[2].pos)
-    };*/
 
     for (int i = 0; i < INSTANCE_NUM; i++)
     {
-        glm::mat4 trans = glm::translate(glm::mat4(1.f), objects[i].pos);
+        glm::mat4 trans = glm::translate(glm::mat4(1.f), objects[i].currPos);
         model_matrix_data.push_back(trans);
     }
 
@@ -578,7 +517,11 @@ void initOpenGL()
     reload_shader();
     mesh_data = LoadMesh(mesh_name);
     processSceneData();
-    generateBVH();
+    initBVH();
+    initCamera();
+
+    // create attribute less vao for arena plane
+    glGenVertexArrays(1, &attribless_arena_vao);
 
     // load texture
     texture_id = LoadTexture(texture_name);
@@ -592,7 +535,7 @@ void initOpenGL()
 
     // bind vertex attribute
     AABB aabb = objects[0].aabb;
-    aabbVBO = createAABBVbo(aabb);
+    aabbVBO = BVH::createAABBVbo(aabb);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
 
@@ -629,10 +572,10 @@ void initOpenGL()
     // bind aabbvbo to shader;
 
     //Create and initialize uniform buffers
-    glGenBuffers(1, &scene_ubo);
-    glBindBuffer(GL_UNIFORM_BUFFER, scene_ubo);
-    glBufferData(GL_UNIFORM_BUFFER, sizeof(SceneUniforms), nullptr, GL_STREAM_DRAW); //Allocate memory for the buffer, but don't copy (since pointer is null).
-    glBindBufferBase(GL_UNIFORM_BUFFER, UboBinding::scene, scene_ubo); //Associate this uniform buffer with the uniform block in the shader that has the same binding.
+    //glGenBuffers(1, &scene_ubo);
+    //glBindBuffer(GL_UNIFORM_BUFFER, scene_ubo);
+    //glBufferData(GL_UNIFORM_BUFFER, sizeof(SceneUniforms), nullptr, GL_STREAM_DRAW); //Allocate memory for the buffer, but don't copy (since pointer is null).
+    //glBindBufferBase(GL_UNIFORM_BUFFER, UboBinding::scene, scene_ubo); //Associate this uniform buffer with the uniform block in the shader that has the same binding.
 
     glGenBuffers(1, &light_ubo);
     glBindBuffer(GL_UNIFORM_BUFFER, light_ubo);

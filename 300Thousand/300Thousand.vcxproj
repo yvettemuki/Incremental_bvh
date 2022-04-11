@@ -157,6 +157,7 @@
     <ClCompile Include="..\imgui-master\imgui_widgets.cpp" />
     <ClCompile Include="AABB.cpp" />
     <ClCompile Include="BVH.cpp" />
+    <ClCompile Include="Camera.cpp" />
     <ClCompile Include="DebugCallback.cpp" />
     <ClCompile Include="InitShader.cpp" />
     <ClCompile Include="LoadMesh.cpp" />
@@ -176,6 +177,7 @@
     <ClInclude Include="..\imgui-master\imstb_truetype.h" />
     <ClInclude Include="AABB.h" />
     <ClInclude Include="BVH.h" />
+    <ClInclude Include="Camera.h" />
     <ClInclude Include="Constants.hpp" />
     <ClInclude Include="DebugCallback.h" />
     <ClInclude Include="InitShader.h" />

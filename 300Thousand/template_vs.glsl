@@ -14,6 +14,14 @@ layout(location = 1) in vec2 tex_coord_attrib;
 layout(location = 2) in vec3 normal_attrib;  
 layout(location = 3) in mat4 model_matrix;  // 3 4 5 6
 
+// quad for the arena ground plane
+const vec4 quad[4] = vec4[] (
+	vec4(-1.0, 0.0, 1.0, 1.0), 
+	vec4(-1.0, 0.0, -1.0, 1.0), 
+	vec4( 1.0, 0.0, 1.0, 1.0), 
+	vec4( 1.0, 0.0, -1.0, 1.0)
+);
+
 out VertexData
 {
 	vec2 tex_coord;
@@ -25,6 +33,7 @@ void main(void)
 {
 	if (type == 1)
 	{
+		// objects 
 		gl_Position = PV * model_matrix * M * vec4(pos_attrib, 1.0); //transform vertices and send result into pipeline
 
 		outData.tex_coord = tex_coord_attrib; //send tex_coord to fragment shader
@@ -34,7 +43,17 @@ void main(void)
 
 	if (type == 2)
 	{
+		// bounding box
 		gl_Position = PV * model_matrix * M * vec4(pos_attrib, 1.0);
+	}
+
+	if (type == 3)
+	{
+		// arena plane
+		gl_Position = PV * M * quad[gl_VertexID];
+		outData.tex_coord = 0.5 * (quad[gl_VertexID].xy + vec2(1.0));
+		outData.pw = vec3(M * quad[gl_VertexID]);
+		outData.nw = vec3(M * vec4(0.0, 1.0, 0.0, 0.0));
 	}
 	
 }
