@@ -11,13 +11,27 @@ struct AABB
 {
 public:
 	AABB(float minX, float minY, float minZ, float maxX, float maxY, float maxZ)
-		: minX(minX), minY(minY), minZ(minZ), maxX(maxX), maxY(maxY), maxZ(maxZ) {};
+		: minX(minX), minY(minY), minZ(minZ), maxX(maxX), maxY(maxY), maxZ(maxZ) 
+	{
+		setDefaultAABB(minX, minY, minZ, maxX, maxY, maxZ);
+	};
+
+	void setDefaultAABB(float minX, float minY, float minZ, float maxX, float maxY, float maxZ)
+	{
+		minX_0 = minX;
+		minY_0 = minY;
+		minZ_0 = minZ;
+
+		maxX_0 = maxX;
+		maxY_0 = maxY;
+		maxZ_0 = maxZ;
+	}
 
 	bool overlap(const AABB& other) const
 	{
 		return (
 			minX < other.maxX&& maxX > other.minX &&
-			minY < other.maxY&& maxY > other.minY &&
+			//minY < other.maxY&& maxY > other.minY &&  // because we just need xz moving
 			minZ < other.maxZ&& maxZ > other.minZ
 			);
 	};
@@ -41,19 +55,19 @@ public:
 		);
 	}
 
-	void update(const glm::vec3 deltaPos)
+	void update(const glm::vec3 pos,  const glm::vec3 scale)
 	{
-		/*AABB aabb(pos.x + minX, pos.y + minY, pos.z + minZ, 
+		/*AABB aabb(pos.x + minX, pos.y + minY, pos.z + minZ,
 			pos.x + maxX, pos.y + maxY, pos.z + maxZ);
 
 		return aabb;*/
 
-		minX += deltaPos.x;
-		maxX += deltaPos.x;
-		minY += deltaPos.y;
-		maxY += deltaPos.y;
-		minZ += deltaPos.z;
-		maxZ += deltaPos.z;
+		minX = minX_0 * scale.x + pos.x;
+		maxX = maxX_0 * scale.x + pos.x;
+		minY = minY_0 * scale.y + pos.y;
+		maxY = maxY_0 * scale.y + pos.y;
+		minZ = minZ_0 * scale.z + pos.z;
+		maxZ = maxZ_0 * scale.z + pos.z;
 	}
 
 	float surfaceAreaSum(const AABB& other) const
@@ -72,6 +86,13 @@ public:
 	float maxX;
 	float maxY;
 	float maxZ;
+
+	float minX_0;
+	float minY_0;
+	float minZ_0;
+	float maxX_0;
+	float maxY_0;
+	float maxZ_0;
 	
 };
 

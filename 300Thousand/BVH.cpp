@@ -130,6 +130,18 @@ void BVH::updateAABBInBVH(int nodeIndex)
 
 GLuint BVH::createAABBVbo(AABB aabb)
 {
+	vector<glm::vec3> boundingBoxVertices = generateAABBvertices(aabb);
+
+	GLuint vbo;
+	glGenBuffers(1, &vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * 36, boundingBoxVertices.data(), GL_STATIC_DRAW);
+
+	return vbo;
+}
+
+vector<vec3> BVH::generateAABBvertices(const AABB aabb)
+{
 	vector<glm::vec3> boundingBoxVerties;
 
 	boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
@@ -180,12 +192,7 @@ GLuint BVH::createAABBVbo(AABB aabb)
 	boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.minZ));
 	boundingBoxVerties.push_back(glm::vec3(aabb.maxX, aabb.minY, aabb.maxZ));
 
-	GLuint vbo;
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(glm::vec3) * 36, boundingBoxVerties.data(), GL_STATIC_DRAW);
-
-	return vbo;
+	return boundingBoxVerties;
 }
 
 void BVH::drawBVH()

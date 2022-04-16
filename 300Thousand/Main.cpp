@@ -47,6 +47,7 @@ GLuint texture_id = -1;
 MeshData mesh_data;
 vector<SceneObject> objects;  // aabb, position, velocity
 BVH* bvh;
+AABB* defaultAABB;
 glm::mat4 M = mat4(1.f);
 
 // Camera
@@ -95,7 +96,8 @@ struct MaterialUniforms
 GLuint light_ubo = -1;
 GLuint material_ubo = -1;
 GLuint model_matrix_buffer = -1;
-GLuint aabbVAO[INSTANCE_NUM] = {-1};
+GLuint aabbVAOs[INSTANCE_NUM] = { -1 };
+GLuint aabbVBOs[INSTANCE_NUM] = { -1 };
 
 namespace UboBinding
 {
@@ -141,19 +143,40 @@ void collisionDetection()
 
             if (aabb_1.overlap(aabb_2))
             {
-                // collided
-                glm::vec3 area = aabb_1.intersection(aabb_2);
-
-                objects[i].velocity = -objects[i].velocity;
-                objects[j].velocity = -objects[j].velocity;
+                // difference of distance in x and z
+                glm::vec3 deltaArea = aabb_1.intersection(aabb_2);
 
                 // update position
-                objects[i].prevPos = glm::vec3(objects[i].currPos.x, objects[i].currPos.y, objects[i].currPos.z);
-                objects[i].currPos += objects[i].velocity * area;
+                // calculate the first collision axis
+                glm::vec3 velocity_delta = objects[i].velocity + objects[j].velocity;
+                float delta_time_x = deltaArea.x / velocity_delta.x;
+                float delta_time_z = deltaArea.z / velocity_delta.z;
+                if (delta_time_x <= delta_time_z)
+                {
+                    // x direction is the hit normal
+                    objects[i].currPos.x -= objects[i].velocity.x * delta_time;
+                    objects[j].currPos.x -= objects[j].velocity.x * delta_time;
+
+                    // update velocity
+                    objects[i].velocity.x = -objects[i].velocity.x;
+                    objects[j].velocity.x = -objects[j].velocity.x;
+                }
+                else
+                {
+                    // z direction is the hit normal
+                    objects[i].currPos.z -= objects[i].velocity.z * delta_time;
+                    objects[j].currPos.z -= objects[j].velocity.z * delta_time;
+
+                    // update velocity
+                    objects[i].velocity.z = -objects[i].velocity.z;
+                    objects[j].velocity.z = -objects[j].velocity.z;
+                }
+
 
                 // update bounding box
-                glm::vec3 deltaPos = objects[i].currPos - objects[i].prevPos;
-                objects[i].aabb.update(deltaPos);
+                glm::vec3 scale = glm::vec3(mScale * mesh_data.mScaleFactor);
+                objects[i].aabb.update(objects[i].currPos, scale);
+                objects[j].aabb.update(objects[j].currPos, scale);
 
             }
         }
@@ -164,17 +187,17 @@ void collisionDetection()
 void updatePosition(glm::vec3& curr_pos, glm::vec3& prev_pos, glm::vec3& curr_velocity)
 {
     // bounding detection
-    if (curr_pos.x < -2.0 || curr_pos.x > 2.0)
+    if (curr_pos.x < -3.0 || curr_pos.x > 3.0)
     {
-        if (curr_pos.x < -2.0)
-            curr_pos.x = -2.0;
+        if (curr_pos.x < -3.0)
+            curr_pos.x = -3.0;
         else
-            curr_pos.x = 2.0;
+            curr_pos.x = 3.0;
 
         curr_velocity.x = -curr_velocity.x;
     }
 
-    if (curr_pos.y < -2.0 || curr_pos.y > 2.0)
+    /*if (curr_pos.y < -2.0 || curr_pos.y > 2.0)
     {
         if (curr_pos.y < -2.0)
             curr_pos.y = -2.0;
@@ -182,14 +205,14 @@ void updatePosition(glm::vec3& curr_pos, glm::vec3& prev_pos, glm::vec3& curr_ve
             curr_pos.y = 2.0;
 
         curr_velocity.y = -curr_velocity.y;
-    }
+    }*/
 
-    if (curr_pos.z < -4.0 || curr_pos.z > -1.0)
+    if (curr_pos.z < -3.0 || curr_pos.z > 3.0)
     {
-        if (curr_pos.z < -4.0)
-            curr_pos.z = -4.0;
+        if (curr_pos.z < -3.0)
+            curr_pos.z = -3.0;
         else
-            curr_pos.z = -1.0;
+            curr_pos.z = 3.0;
 
         curr_velocity.z = -curr_velocity.z;
     }
@@ -198,6 +221,7 @@ void updatePosition(glm::vec3& curr_pos, glm::vec3& prev_pos, glm::vec3& curr_ve
     curr_pos += curr_velocity * delta_time;
 
 }
+
 void updatePositions()
 {
     for (int i = 0; i < INSTANCE_NUM; i++)
@@ -206,15 +230,28 @@ void updatePositions()
 
         // update bounding box
         glm::vec3 deltaPos = objects[i].currPos - objects[i].prevPos;
-        objects[i].aabb.update(deltaPos);
+        glm::vec3 scale = glm::vec3(mScale * mesh_data.mScaleFactor);
+        objects[i].aabb.update(objects[i].currPos, scale);
+    }
+}
+
+void updateBoundingBox()
+{
+    for (int i = 0; i < INSTANCE_NUM; i++)
+    {
+        // update the bounding box vertex data
+        AABB aabb(mesh_data.mBbMin.x, mesh_data.mBbMin.y, mesh_data.mBbMin.z, mesh_data.mBbMax.x, mesh_data.mBbMax.y, mesh_data.mBbMax.z);
+        vector<glm::vec3> vertices = BVH::generateAABBvertices(objects[i].aabb);
+
+        // update aabb vbo
+        glBindBuffer(GL_ARRAY_BUFFER, aabbVBOs[i]);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, 36 * sizeof(glm::vec3), vertices.data());
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
 }
 
 void processSceneData()
 {
-    aiVector3D mBbMin = mesh_data.mBbMin;
-    aiVector3D mBbMax = mesh_data.mBbMax;
-
     int length = ceil(sqrt(INSTANCE_NUM));
 
     float unit_area = (float)width_range / (float)length;  // x=y
@@ -239,8 +276,9 @@ void processSceneData()
         glm::vec3 _velocity = glm::vec3(random(-0.5, 0.2), 0.0, random(-0.5, -0.4));
 
         // update aabb
-        AABB aabb(mBbMin.x, mBbMin.y, mBbMin.z, mBbMax.x, mBbMax.y, mBbMax.z);
-        aabb.update(_position);
+        glm::vec3 scale = glm::vec3(mScale * mesh_data.mScaleFactor);
+        AABB aabb(mesh_data.mBbMin.x, mesh_data.mBbMin.y, mesh_data.mBbMin.z, mesh_data.mBbMax.x, mesh_data.mBbMax.y, mesh_data.mBbMax.z);
+        aabb.update(_position, scale);
 
         SceneObject sceneObject(i, _position, glm::vec3(0, 0, 0), _velocity, aabb);
         /*std::cout << sceneObject.pos.x << ", " << sceneObject.pos.y << std::endl;
@@ -303,7 +341,7 @@ void draw_gui(GLFWwindow* window)
 
    /* ImGui::SliderFloat("Y View angle", &yAngle, -glm::pi<float>(), +glm::pi<float>());
     ImGui::SliderFloat("X View angle", &xAngle, -glm::pi<float>(), +glm::pi<float>());*/
-    ImGui::SliderFloat3("Cam Pos", camPos, -3.f, 3.f);
+    ImGui::SliderFloat3("Cam Pos", camPos, -10.f, 10.f);
     ImGui::SliderFloat("Scale", &mScale, -10.0f, +10.0f);
     ImGui::Checkbox("AABB", &enableAABB);
     ImGui::Checkbox("Dynamic", &enableDynamic);
@@ -362,7 +400,7 @@ void display(GLFWwindow* window)
     {
         for (int i = 0; i < INSTANCE_NUM; i++)
         {
-            glBindVertexArray(aabbVAO[i]);
+            glBindVertexArray(aabbVAOs[i]);
             glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
             glUniform1i(UniformLocs::type, 2);
             glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -377,7 +415,7 @@ void display(GLFWwindow* window)
     }*/
 
     // draw arena plane
-    M = glm::translate(glm::mat4(1.0), glm::vec3(0.0, -0.15, 0.0)) * glm::scale(mat4(1.0), glm::vec3(5.0));
+    M = glm::translate(glm::mat4(1.0), glm::vec3(0.0, -0.15, 0.0)) * glm::scale(mat4(1.0), glm::vec3(8.0));
     glUniformMatrix4fv(UniformLocs::M, 1, false, glm::value_ptr(M));
     glBindVertexArray(attribless_arena_vao);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -417,6 +455,9 @@ void idle()
 
         // collision detection
         collisionDetection();
+
+        // update bounding box
+        updateBoundingBox();
     }
     
 }
@@ -532,11 +573,11 @@ void initOpenGL()
     model_matrix_buffer = create_model_matrix_buffer();
 
     // init aabb box
-    glGenVertexArrays(INSTANCE_NUM, aabbVAO);
+    glGenVertexArrays(INSTANCE_NUM, aabbVAOs);
     for (int i = 0; i < INSTANCE_NUM; i++)
     {
-        glBindVertexArray(aabbVAO[i]);
-        GLuint aabbVBO = BVH::createAABBVbo(objects[i].aabb);
+        glBindVertexArray(aabbVAOs[i]);
+        aabbVBOs[i] = BVH::createAABBVbo(objects[i].aabb);
         glEnableVertexAttribArray(0);
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
         glBindVertexArray(0);

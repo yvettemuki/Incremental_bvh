@@ -42,6 +42,7 @@ public:
 	void updateAABBInBVH(int node_2_parent_index);
 	void drawBVH();
 	static GLuint createAABBVbo(AABB aabb);
+	static vector<vec3> generateAABBvertices(AABB aabb);
 
 private:
 	vector<BVHNode> bvhNodes;
