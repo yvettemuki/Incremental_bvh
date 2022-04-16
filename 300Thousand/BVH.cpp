@@ -8,6 +8,25 @@ BVH::BVH(vector<SceneObject> objects)
 		addNode(object);
 	}
 
+	glGenVertexArrays(INSTANCE_NUM - 1, vaos);
+	int count = 0;
+	std::cout << "````````````````" << std::endl;
+	for (int i = 0; i < bvhNodes.size(); i++)
+	{
+		if (bvhNodes[i].indexMapToScene == -1)
+		{
+			std::cout << i << std::endl;
+			glBindVertexArray(vaos[count]);
+			vbos[count] = BVH::createAABBVbo(bvhNodes[i].aabb);
+			glEnableVertexAttribArray(0);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+			glBindVertexArray(0);
+			count++;
+		}
+	}
+	std::cout << "````````````````" << std::endl;
+
+	std::cout << count << " --------- " << std::endl;
 }
 
 //BVHNode BVH::traverseBVH()
@@ -31,16 +50,22 @@ void BVH::addNode(SceneObject object)
 	else
 	{
 		AABB aabb_1 = object.aabb;
-
+		
 		// find closet node 2
 		int node_2_index = findClosestNode(aabb_1, rootIndex);
-		std::cout << node_2_index << std::endl;
 
 		BVHNode node_2 = bvhNodes[node_2_index];
 		AABB aabb_2 = node_2.aabb;
 
 		// create new bounding box
 		AABB aabb_new = aabb_1.unions(aabb_2);
+		if (node_2_index == 6)
+		{
+			std::cout << "aabb_new 8 for 6: " << aabb_new.minZ << ", " << aabb_new.maxZ << std::endl;
+			std::cout << "aabb_1 8 for 6: " << aabb_1.minZ << ", " << aabb_1.maxZ << std::endl;
+			std::cout << "aabb_2 8 for 6: " << aabb_2.minZ << ", " << aabb_2.maxZ << std::endl;
+			std::cout << "the current index is: " << object.index << std::endl;
+		}
 
 		int node_2_parent_index = node_2.parentNode;
 		int node_1_index = bvhNodes.size();
@@ -95,7 +120,7 @@ int BVH::findClosestNode(AABB aabb, int nodeIndex)
 
 			float left_area_sum = aabb.surfaceAreaSum(bvhNodes[left_child_node].aabb);
 			float right_area_sum = aabb.surfaceAreaSum(bvhNodes[right_child_node].aabb);
-			if (left_area_sum >= right_area_sum)
+			if (left_area_sum <= right_area_sum)
 				return left_child_node;
 			else
 				return right_child_node;
@@ -115,17 +140,32 @@ int BVH::findClosestNode(AABB aabb, int nodeIndex)
 
 void BVH::updateAABBInBVH(int nodeIndex)
 {
-	if (nodeIndex == rootIndex)
-	{
-		return;
-	}
-
 	int left_child = bvhNodes[nodeIndex].leftChildNode;
 	int right_child = bvhNodes[nodeIndex].rightChildNode;
 
 	bvhNodes[nodeIndex].aabb = bvhNodes[left_child].aabb.unions(bvhNodes[right_child].aabb);
 
-	updateAABBInBVH(bvhNodes[nodeIndex].parentNode);
+	if (nodeIndex != rootIndex)
+		updateAABBInBVH(bvhNodes[nodeIndex].parentNode);
+}
+
+void BVH::traverseBVH(int index)
+{
+	// print node
+	cout << "object index: " << bvhNodes[index].indexMapToScene << " | "
+		<< "tree index: " << bvhNodes[index].index << " | "
+		<< "left child: " << bvhNodes[index].leftChildNode << " | "
+		<< "right child: " << bvhNodes[index].rightChildNode << " | "
+		<< "parent node: " << bvhNodes[index].parentNode
+		<< std::endl;
+
+	if (bvhNodes[index].indexMapToScene == -1)
+	{
+		// branch node
+		traverseBVH(bvhNodes[index].leftChildNode);
+		traverseBVH(bvhNodes[index].rightChildNode);
+	}
+	
 }
 
 GLuint BVH::createAABBVbo(AABB aabb)
@@ -142,6 +182,7 @@ GLuint BVH::createAABBVbo(AABB aabb)
 
 vector<vec3> BVH::generateAABBvertices(const AABB aabb)
 {
+	std::cout << aabb.minX << ", " << aabb.minY << ", " << aabb.minZ << ", " << aabb.maxX << ", " << aabb.maxY << ", " << aabb.maxZ << std::endl;
 	vector<glm::vec3> boundingBoxVerties;
 
 	boundingBoxVerties.push_back(glm::vec3(aabb.minX, aabb.maxY, aabb.maxZ));
@@ -197,7 +238,19 @@ vector<vec3> BVH::generateAABBvertices(const AABB aabb)
 
 void BVH::drawBVH()
 {
+	for (int i = 0; i < INSTANCE_NUM - 1; i++)
+	{
+		glBindVertexArray(vaos[i]);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glUniform1i(2, 2);
+		glDrawArrays(GL_TRIANGLES, 0, 36);
+		glBindVertexArray(0);
+	}
+}
 
+int BVH::getRootIndex()
+{
+	return rootIndex;
 }
 
 

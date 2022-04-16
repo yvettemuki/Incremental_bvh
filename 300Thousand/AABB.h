@@ -50,8 +50,8 @@ public:
 	AABB unions(const AABB& other) const
 	{
 		return AABB(
-			std::min(minX, other.minX), std::min(minY, other.minY), std::min(minZ, minZ),
-			std::max(maxX, other.maxY), std::max(maxY, other.maxY), std::max(maxZ, maxZ)
+			std::min(minX, other.minX), std::min(minY, other.minY), std::min(minZ, other.minZ),
+			std::max(maxX, other.maxX), std::max(maxY, other.maxY), std::max(maxZ, other.maxZ)
 		);
 	}
 

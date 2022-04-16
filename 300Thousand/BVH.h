@@ -8,6 +8,7 @@
 #include <glm/gtx/transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include "SceneObject.h"
+#include "Constants.hpp"
 
 using namespace std;
 using namespace glm;
@@ -36,13 +37,17 @@ public:
 	void initBVH();
 	void addNode(SceneObject object);
 	void updateBVH();
-	BVHNode traverseBVH();
+	void traverseBVH(int index);
 	void deleteBVH();
 	int findClosestNode(AABB aabb, int nodeIndex);
 	void updateAABBInBVH(int node_2_parent_index);
 	void drawBVH();
+	int getRootIndex();
 	static GLuint createAABBVbo(AABB aabb);
 	static vector<vec3> generateAABBvertices(AABB aabb);
+
+	GLuint vaos[INSTANCE_NUM - 1];
+	GLuint vbos[INSTANCE_NUM - 1];
 
 private:
 	vector<BVHNode> bvhNodes;

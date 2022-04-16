@@ -64,6 +64,7 @@ float fov = glm::pi<float>() / 4.0;
 float camPos[3] = { 0.0, 0.5, 3.0 };
 bool recording = false;
 bool enableAABB = false;
+bool enableBVH = false;
 bool enableDynamic = false;
 
 
@@ -98,6 +99,7 @@ GLuint material_ubo = -1;
 GLuint model_matrix_buffer = -1;
 GLuint aabbVAOs[INSTANCE_NUM] = { -1 };
 GLuint aabbVBOs[INSTANCE_NUM] = { -1 };
+GLuint bvhVAOs[INSTANCE_NUM - 1] = { -1 };
 
 namespace UboBinding
 {
@@ -269,9 +271,9 @@ void processSceneData()
             /*random(-2.0, 2.0),
             0.0,
             random(-3.0, -1.0)*/
-            random(x_0, x_0 + unit_area),
+            x_0,
             0.0,
-            random(z_0, z_0 + unit_area)
+            z_0
         );
         glm::vec3 _velocity = glm::vec3(random(-0.5, 0.2), 0.0, random(-0.5, -0.4));
 
@@ -291,6 +293,7 @@ void processSceneData()
 void initBVH()
 {
     bvh = new BVH(objects);
+    bvh->traverseBVH(bvh->getRootIndex());
 }
 
 void initCamera()
@@ -345,6 +348,7 @@ void draw_gui(GLFWwindow* window)
     ImGui::SliderFloat("Scale", &mScale, -10.0f, +10.0f);
     ImGui::Checkbox("AABB", &enableAABB);
     ImGui::Checkbox("Dynamic", &enableDynamic);
+    ImGui::Checkbox("BVH", &enableBVH);
 
     ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
     ImGui::End();
@@ -409,10 +413,10 @@ void display(GLFWwindow* window)
     }
 
     // draw bvh
-    /*if (enableBVH)
+    if (enableBVH)
     {
-        
-    }*/
+        bvh->drawBVH();
+    }
 
     // draw arena plane
     M = glm::translate(glm::mat4(1.0), glm::vec3(0.0, -0.15, 0.0)) * glm::scale(mat4(1.0), glm::vec3(8.0));
@@ -582,6 +586,7 @@ void initOpenGL()
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
         glBindVertexArray(0);
     }  
+
 
     //glBindBuffer(GL_ARRAY_BUFFER, model_matrix_buffer);
     //// bounding model matrix to shader
