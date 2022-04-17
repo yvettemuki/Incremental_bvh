@@ -134,6 +134,53 @@ float random(float min, float max)
 
 void collisionDetection()
 {
+    //for (int i = 0; i < INSTANCE_NUM; i++)
+    //{
+    //    vector<int> collisions = bvh->CollisionDetection(objects[i].aabb, i);
+
+    //    for (int j = 0; j < collisions.size(); j++)
+    //    {
+    //        int k = collisions[j];
+    //        AABB aabb_1 = objects[i].aabb;
+    //        AABB aabb_2 = objects[k].aabb;
+
+    //        // difference of distance in x and z
+    //        glm::vec3 deltaArea = aabb_1.intersection(aabb_2);
+
+    //        // update position
+    //        // calculate the first collision axis
+    //        glm::vec3 velocity_delta = objects[i].velocity + objects[k].velocity;
+    //        float delta_time_x = deltaArea.x / velocity_delta.x;
+    //        float delta_time_z = deltaArea.z / velocity_delta.z;
+    //        if (delta_time_x <= delta_time_z)
+    //        {
+    //            // x direction is the hit normal
+    //            objects[i].currPos.x -= objects[i].velocity.x * delta_time;
+    //            objects[k].currPos.x -= objects[k].velocity.x * delta_time;
+
+    //            // update velocity
+    //            objects[i].velocity.x = -objects[i].velocity.x;
+    //            objects[k].velocity.x = -objects[k].velocity.x;
+    //        }
+    //        else
+    //        {
+    //            // z direction is the hit normal
+    //            objects[i].currPos.z -= objects[i].velocity.z * delta_time;
+    //            objects[k].currPos.z -= objects[k].velocity.z * delta_time;
+
+    //            // update velocity
+    //            objects[i].velocity.z = -objects[i].velocity.z;
+    //            objects[k].velocity.z = -objects[k].velocity.z;
+    //        }
+
+
+    //        // update bounding box
+    //        glm::vec3 scale = glm::vec3(mScale * mesh_data.mScaleFactor);
+    //        objects[i].aabb.update(objects[i].currPos, scale);
+    //        objects[k].aabb.update(objects[k].currPos, scale);
+    //    }
+    //}
+
     for (int i = 0; i < INSTANCE_NUM; i++)
     {
         for (int j = i + 1; j < INSTANCE_NUM; j++) 
@@ -184,17 +231,18 @@ void collisionDetection()
         }
     }
 
+
 }
 
 void updatePosition(glm::vec3& curr_pos, glm::vec3& prev_pos, glm::vec3& curr_velocity)
 {
     // bounding detection
-    if (curr_pos.x < -3.0 || curr_pos.x > 3.0)
+    if (curr_pos.x < -15.0 || curr_pos.x > 15.0)
     {
-        if (curr_pos.x < -3.0)
-            curr_pos.x = -3.0;
+        if (curr_pos.x < -15.0)
+            curr_pos.x = -15.0;
         else
-            curr_pos.x = 3.0;
+            curr_pos.x = 15.0;
 
         curr_velocity.x = -curr_velocity.x;
     }
@@ -209,12 +257,12 @@ void updatePosition(glm::vec3& curr_pos, glm::vec3& prev_pos, glm::vec3& curr_ve
         curr_velocity.y = -curr_velocity.y;
     }*/
 
-    if (curr_pos.z < -3.0 || curr_pos.z > 3.0)
+    if (curr_pos.z < -15.0 || curr_pos.z > 15.0)
     {
-        if (curr_pos.z < -3.0)
-            curr_pos.z = -3.0;
+        if (curr_pos.z < -15.0)
+            curr_pos.z = -15.0;
         else
-            curr_pos.z = 3.0;
+            curr_pos.z = 15.0;
 
         curr_velocity.z = -curr_velocity.z;
     }
@@ -241,8 +289,8 @@ void updateBoundingBox()
 {
     for (int i = 0; i < INSTANCE_NUM; i++)
     {
-        // update the bounding box vertex data
-        AABB aabb(mesh_data.mBbMin.x, mesh_data.mBbMin.y, mesh_data.mBbMin.z, mesh_data.mBbMax.x, mesh_data.mBbMax.y, mesh_data.mBbMax.z);
+        // update the aabb box vertex data
+        //AABB aabb(mesh_data.mBbMin.x, mesh_data.mBbMin.y, mesh_data.mBbMin.z, mesh_data.mBbMax.x, mesh_data.mBbMax.y, mesh_data.mBbMax.z);
         vector<glm::vec3> vertices = BVH::generateAABBvertices(objects[i].aabb);
 
         // update aabb vbo
@@ -250,6 +298,10 @@ void updateBoundingBox()
         glBufferSubData(GL_ARRAY_BUFFER, 0, 36 * sizeof(glm::vec3), vertices.data());
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
+
+    // update bvh (!! not work because the aabb is not update)
+    /*delete bvh;
+    bvh = new BVH(objects);*/
 }
 
 void processSceneData()
@@ -344,8 +396,8 @@ void draw_gui(GLFWwindow* window)
 
    /* ImGui::SliderFloat("Y View angle", &yAngle, -glm::pi<float>(), +glm::pi<float>());
     ImGui::SliderFloat("X View angle", &xAngle, -glm::pi<float>(), +glm::pi<float>());*/
-    ImGui::SliderFloat3("Cam Pos", camPos, -10.f, 10.f);
-    ImGui::SliderFloat("Scale", &mScale, -10.0f, +10.0f);
+    ImGui::SliderFloat3("Cam Pos", camPos, -20.f, 20.f);
+    ImGui::SliderFloat("Scale", &mScale, -1.0f, +1.0f);
     ImGui::Checkbox("AABB", &enableAABB);
     ImGui::Checkbox("Dynamic", &enableDynamic);
     ImGui::Checkbox("BVH", &enableBVH);
@@ -419,7 +471,7 @@ void display(GLFWwindow* window)
     }
 
     // draw arena plane
-    M = glm::translate(glm::mat4(1.0), glm::vec3(0.0, -0.15, 0.0)) * glm::scale(mat4(1.0), glm::vec3(8.0));
+    M = glm::translate(glm::mat4(1.0), glm::vec3(0.0, -0.2, 0.0)) * glm::scale(mat4(1.0), glm::vec3(20.0));
     glUniformMatrix4fv(UniformLocs::M, 1, false, glm::value_ptr(M));
     glBindVertexArray(attribless_arena_vao);
     glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);

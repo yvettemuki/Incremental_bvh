@@ -57,11 +57,6 @@ public:
 
 	void update(const glm::vec3 pos,  const glm::vec3 scale)
 	{
-		/*AABB aabb(pos.x + minX, pos.y + minY, pos.z + minZ,
-			pos.x + maxX, pos.y + maxY, pos.z + maxZ);
-
-		return aabb;*/
-
 		minX = minX_0 * scale.x + pos.x;
 		maxX = maxX_0 * scale.x + pos.x;
 		minY = minY_0 * scale.y + pos.y;

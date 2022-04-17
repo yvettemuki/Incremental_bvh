@@ -34,14 +34,15 @@ class BVH
 {
 public:
 	BVH(const vector<SceneObject>);
-	void initBVH();
 	void addNode(SceneObject object);
+	void updateNode(int addIndex, int parnetIndex);
 	void updateBVH();
 	void traverseBVH(int index);
-	void deleteBVH();
 	int findClosestNode(AABB aabb, int nodeIndex);
-	void updateAABBInBVH(int node_2_parent_index);
+	void refitParentAABBInBVH(int node_2_parent_index);
 	void drawBVH();
+	vector<int> CollisionDetection(AABB aabb, int sceneIndex);
+	void searchCollision(AABB aabb, int nodeIndex, int searchNodeIndex, vector<int>& collisions);
 	int getRootIndex();
 	static GLuint createAABBVbo(AABB aabb);
 	static vector<vec3> generateAABBvertices(AABB aabb);
